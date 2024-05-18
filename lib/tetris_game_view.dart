@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 import 'package:tetris/model/tetromino.dart';
+import 'package:tetris/util/key_pressing_checker.dart';
 
 class TetrisGameView extends StatefulWidget {
   const TetrisGameView({super.key});
@@ -15,6 +18,10 @@ class _TetrisGameViewState extends State<TetrisGameView> {
   late Tetromino? activeTetromino = tetrominoBag.first;
   late Tetromino? nextTetromino = tetrominoBag[1];
 
+  KeyPressingChecker leftKeyPressingChecker = KeyPressingChecker();
+  KeyPressingChecker rightKeyPressingChecker = KeyPressingChecker();
+  KeyPressingChecker downKeyPressingChecker = KeyPressingChecker();
+
   int currentBlockX = 2;
   int currentBlockY = 0;
 
@@ -25,24 +32,123 @@ class _TetrisGameViewState extends State<TetrisGameView> {
   }
 
   void moveBlockDown() {
-    currentBlockY++;
+    setState(() {
+      currentBlockY++;
+    });
   }
 
   void moveBlockLeft() {
-    currentBlockX--;
+    setState(() {
+      currentBlockX--;
+    });
+  }
+
+  void moveBlockToLeftWall() {
+    setState(() {
+      currentBlockX = 0;
+    });
   }
 
   void moveBlockRight() {
-    currentBlockX++;
+    setState(() {
+      currentBlockX++;
+    });
+  }
+
+  void moveBlockToRightWall() {
+    setState(() {
+      currentBlockX = 7;
+    });
+  }
+
+  void fallBlock() {
+    setState(() {
+      currentBlockY = 17;
+    });
   }
 
   void reset() {
-    currentBlockX = 0;
     currentBlockY = 0;
+    currentBlockX = 0;
   }
 
   List<List<int>> gameBoard =
       List.generate(20, (columnIndex) => List.generate(10, (rowIndex) => 0));
+
+  bool keyUpEvent(KeyUpEvent event) {
+    switch (event.logicalKey.keyLabel) {
+      case "A":
+        leftKeyPressingChecker.isPressing = false;
+        leftKeyPressingChecker.cancelTimer;
+        break;
+      case "D":
+        rightKeyPressingChecker.isPressing = false;
+        rightKeyPressingChecker.cancelTimer;
+        break;
+      case "S":
+        downKeyPressingChecker.isPressing = false;
+        downKeyPressingChecker.cancelTimer;
+        break;
+      default:
+        return false;
+    }
+    return true;
+  }
+
+  bool keyDownEvent(KeyDownEvent event) {
+    switch (event.logicalKey.keyLabel) {
+      case "A":
+        moveBlockLeft();
+        leftKeyPressingChecker.isPressing = true;
+        leftKeyPressingChecker.setTimer(moveBlockLeft);
+        break;
+      case "D":
+        moveBlockRight();
+        rightKeyPressingChecker.isPressing = true;
+        rightKeyPressingChecker.setTimer(moveBlockRight);
+        break;
+      case "S":
+        moveBlockDown();
+        downKeyPressingChecker.isPressing = true;
+        downKeyPressingChecker.setTimer(moveBlockDown);
+
+        break;
+      case "W":
+        setState(() {
+          activeTetromino?.rotate();
+        });
+
+      case "X":
+        fallBlock();
+        break;
+      default:
+        return false;
+    }
+    return true;
+  }
+
+  bool keyboardHandler(KeyEvent event) {
+    if (event is KeyUpEvent) {
+      keyUpEvent(event);
+    }
+
+    if (event is KeyDownEvent) {
+      keyDownEvent(event);
+    }
+    return false;
+  }
+
+  @override
+  void initState() {
+    HardwareKeyboard.instance.addHandler(keyboardHandler);
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(keyboardHandler);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,24 +186,6 @@ class _TetrisGameViewState extends State<TetrisGameView> {
                             ),
                         ],
                       ),
-
-                      // GridView.builder(
-                      //   physics: NeverScrollableScrollPhysics(),
-                      //   itemCount: 200,
-                      //   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      //     crossAxisCount: 10,
-                      //   ),
-                      //   itemBuilder: (BuildContext context, int index) {
-                      //     int row = index ~/ 10;
-                      //     int col = index % 10;
-                      //     return Container(
-                      //       color: gameBoard[row][col] == 0
-                      //           ? Colors.white
-                      //           : Colors.blue,
-                      //       margin: EdgeInsets.all(1),
-                      //     );
-                      //   },
-                      // ),
                       // 현재 블록 그리기
                       if (activeTetromino != null)
                         Positioned(
@@ -127,35 +215,6 @@ class _TetrisGameViewState extends State<TetrisGameView> {
                             ),
                           ),
                         ),
-
-                      // Positioned(
-                      //   top: currentBlockY * 20.0,
-                      //   left: currentBlockX * 20.0,
-                      //   child: Container(
-                      //     width: 80,
-                      //     height: 80,
-                      //     child: GridView.builder(
-                      //       physics: NeverScrollableScrollPhysics(),
-                      //       itemCount: 16,
-                      //       gridDelegate:
-                      //           SliverGridDelegateWithFixedCrossAxisCount(
-                      //         crossAxisCount: 4,
-                      //       ),
-                      //       itemBuilder: (BuildContext context, int index) {
-                      //         int row = index ~/ 4;
-                      //         int col = index % 4;
-                      //         return Container(
-                      //           color: activeTetromino!.currentShape.shape[row]
-                      //                       [col] ==
-                      //                   0
-                      //               ? Colors.transparent
-                      //               : activeTetromino!.type.color,
-                      //           margin: EdgeInsets.all(1),
-                      //         );
-                      //       },
-                      //     ),
-                      //   ),
-                      // ),
                     ],
                   ),
                 ),
