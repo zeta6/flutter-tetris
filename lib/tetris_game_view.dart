@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tetris/model/tetromino.dart';
@@ -25,19 +23,112 @@ class _TetrisGameViewState extends State<TetrisGameView> {
   int currentBlockX = 2;
   int currentBlockY = 0;
 
+  List<List<int>> gameBoard =
+      List.generate(20, (columnIndex) => List.generate(10, (rowIndex) => 0));
+
   int blockWidth(List<List<int>> blockShape) {
     return blockShape
         .map((row) => row.length)
         .reduce((value, element) => value > element ? value : element);
   }
 
+  void fixTetromino() {
+    for (int i = 0; i < activeTetromino!.currentShape.shape.length; i++) {
+      for (int j = 0; j < activeTetromino!.currentShape.shape[i].length; j++) {
+        if (activeTetromino!.currentShape.shape[i][j] != 0) {
+          gameBoard[currentBlockY + i][currentBlockX + j] = 1;
+        }
+      }
+    }
+
+    // 가로 줄이 다 찼는지 확인하고 지우는 로직
+    for (int i = gameBoard.length - 1; i >= 0; i--) {
+      bool isRowFull = true;
+      for (int j = 0; j < gameBoard[i].length; j++) {
+        if (gameBoard[i][j] == 0) {
+          isRowFull = false;
+          break;
+        }
+      }
+      if (isRowFull) {
+        // 해당 줄을 지우고 윗 줄을 한 칸씩 내림
+        for (int k = i; k > 0; k--) {
+          gameBoard[k] = List.from(gameBoard[k - 1]);
+        }
+        // 맨 윗 줄은 비움
+        gameBoard[0] = List.generate(10, (index) => 0);
+        i++; // 한 줄이 지워졌으므로 다음 줄을 확인하기 위해 인덱스를 증가시킴
+      }
+    }
+  }
+
+  void spawnNewTetromino() {
+    activeTetromino = nextTetromino;
+    tetrominoBag.shuffle();
+    nextTetromino = tetrominoBag.first;
+    currentBlockX = 2;
+    currentBlockY = 0;
+
+    // 새로운 테트로미노가 충돌하면 게임 오버 처리
+    if (checkCollision(
+        activeTetromino!, currentBlockX, currentBlockY, gameBoard)) {
+      // 게임 오버 로직
+    }
+  }
+
+  bool checkCollision(
+      Tetromino tetromino, int x, int y, List<List<int>> board) {
+    for (int i = 0; i < tetromino.currentShape.shape.length; i++) {
+      for (int j = 0; j < tetromino.currentShape.shape[i].length; j++) {
+        if (tetromino.currentShape.shape[i][j] != 0) {
+          int boardX = x + j;
+          int boardY = y + i;
+
+          // 보드 경계 확인
+          if (boardX < 0 ||
+              boardX >= board[0].length ||
+              boardY < 0 ||
+              boardY >= board.length) {
+            return true;
+          }
+
+          // 다른 블록과 충돌 확인
+          if (board[boardY][boardX] != 0) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   void moveBlockDown() {
+    bool collision = checkCollision(
+      activeTetromino!,
+      currentBlockX,
+      currentBlockY + 1,
+      gameBoard,
+    );
+    if (collision) {
+      fixTetromino();
+      spawnNewTetromino();
+      return;
+    }
     setState(() {
       currentBlockY++;
     });
   }
 
   void moveBlockLeft() {
+    bool collision = checkCollision(
+      activeTetromino!,
+      currentBlockX - 1,
+      currentBlockY,
+      gameBoard,
+    );
+    if (collision) {
+      return;
+    }
     setState(() {
       currentBlockX--;
     });
@@ -50,6 +141,15 @@ class _TetrisGameViewState extends State<TetrisGameView> {
   }
 
   void moveBlockRight() {
+    bool collision = checkCollision(
+      activeTetromino!,
+      currentBlockX + 1,
+      currentBlockY,
+      gameBoard,
+    );
+    if (collision) {
+      return;
+    }
     setState(() {
       currentBlockX++;
     });
@@ -62,8 +162,19 @@ class _TetrisGameViewState extends State<TetrisGameView> {
   }
 
   void fallBlock() {
+    bool collision = false;
+    int fallIndex = 0;
+    while (!collision) {
+      collision = checkCollision(
+        activeTetromino!,
+        currentBlockX,
+        fallIndex + 2,
+        gameBoard,
+      );
+      fallIndex++;
+    }
     setState(() {
-      currentBlockY = 17;
+      currentBlockY = fallIndex;
     });
   }
 
@@ -71,9 +182,6 @@ class _TetrisGameViewState extends State<TetrisGameView> {
     currentBlockY = 0;
     currentBlockX = 0;
   }
-
-  List<List<int>> gameBoard =
-      List.generate(20, (columnIndex) => List.generate(10, (rowIndex) => 0));
 
   bool keyUpEvent(KeyUpEvent event) {
     switch (event.logicalKey.keyLabel) {
@@ -205,7 +313,7 @@ class _TetrisGameViewState extends State<TetrisGameView> {
                                           width: 19,
                                           height: 19,
                                           color: row == 0
-                                              ? Colors.white
+                                              ? Colors.transparent
                                               : activeTetromino!.type.color,
                                           margin: const EdgeInsets.all(1),
                                         ),
