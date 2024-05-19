@@ -205,10 +205,11 @@ enum TetrominoType {
 class Tetromino {
   Tetromino({
     required this.type,
+    this.currentShapeIndex = 0,
   });
 
   TetrominoType type;
-  int currentShapeIndex = 0;
+  int currentShapeIndex;
 
   int get maxShapeIndex => type.blockShapes.length;
 

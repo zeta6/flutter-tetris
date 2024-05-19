@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tetris/model/tetromino.dart';
@@ -14,13 +16,16 @@ class _TetrisGameViewState extends State<TetrisGameView> {
   List<Tetromino> tetrominoBag =
       TetrominoType.values.map((e) => Tetromino(type: e)).toList()..shuffle();
   late Tetromino? activeTetromino = tetrominoBag.first;
-  late Tetromino? nextTetromino = tetrominoBag[1];
+  int bagIndex = 1;
+  late Tetromino? nextTetromino = tetrominoBag[bagIndex];
 
   KeyPressingChecker leftKeyPressingChecker = KeyPressingChecker();
   KeyPressingChecker rightKeyPressingChecker = KeyPressingChecker();
   KeyPressingChecker downKeyPressingChecker = KeyPressingChecker();
 
-  int currentBlockX = 2;
+  Timer? autoDownTimer;
+
+  int currentBlockX = 3;
   int currentBlockY = 0;
 
   List<List<int>> gameBoard =
@@ -36,7 +41,9 @@ class _TetrisGameViewState extends State<TetrisGameView> {
     for (int i = 0; i < activeTetromino!.currentShape.shape.length; i++) {
       for (int j = 0; j < activeTetromino!.currentShape.shape[i].length; j++) {
         if (activeTetromino!.currentShape.shape[i][j] != 0) {
-          gameBoard[currentBlockY + i][currentBlockX + j] = 1;
+          setState(() {
+            gameBoard[currentBlockY + i][currentBlockX + j] = 1;
+          });
         }
       }
     }
@@ -64,14 +71,21 @@ class _TetrisGameViewState extends State<TetrisGameView> {
 
   void spawnNewTetromino() {
     activeTetromino = nextTetromino;
-    tetrominoBag.shuffle();
-    nextTetromino = tetrominoBag.first;
-    currentBlockX = 2;
+    if (bagIndex == 6) {
+      tetrominoBag.shuffle();
+      bagIndex = 0;
+    } else {
+      bagIndex = bagIndex + 1;
+    }
+    nextTetromino = tetrominoBag[bagIndex];
+    currentBlockX = 3;
     currentBlockY = 0;
 
     // 새로운 테트로미노가 충돌하면 게임 오버 처리
     if (checkCollision(
         activeTetromino!, currentBlockX, currentBlockY, gameBoard)) {
+      autoDownTimer?.cancel();
+      HardwareKeyboard.instance.removeHandler(keyboardHandler);
       // 게임 오버 로직
     }
   }
@@ -163,7 +177,7 @@ class _TetrisGameViewState extends State<TetrisGameView> {
 
   void fallBlock() {
     bool collision = false;
-    int fallIndex = 0;
+    int fallIndex = currentBlockY;
     while (!collision) {
       collision = checkCollision(
         activeTetromino!,
@@ -176,6 +190,8 @@ class _TetrisGameViewState extends State<TetrisGameView> {
     setState(() {
       currentBlockY = fallIndex;
     });
+    fixTetromino();
+    spawnNewTetromino();
   }
 
   void reset() {
@@ -217,17 +233,38 @@ class _TetrisGameViewState extends State<TetrisGameView> {
         break;
       case "S":
         moveBlockDown();
+        autoDownTimer?.cancel();
+        autoDownTimer =
+            Timer.periodic(const Duration(milliseconds: 1000), (timer) {
+          moveBlockDown();
+        });
         downKeyPressingChecker.isPressing = true;
         downKeyPressingChecker.setTimer(moveBlockDown);
-
         break;
       case "W":
+        if (activeTetromino == null) return false;
+        Tetromino ratatedTetromino = Tetromino(
+            type: activeTetromino!.type,
+            currentShapeIndex: (activeTetromino!.currentShapeIndex + 1) %
+                activeTetromino!.type.blockShapes.length);
+        bool isColloision = checkCollision(
+          ratatedTetromino,
+          currentBlockX,
+          currentBlockY + 1,
+          gameBoard,
+        );
+        if (isColloision) return false;
         setState(() {
           activeTetromino?.rotate();
         });
 
       case "X":
         fallBlock();
+        autoDownTimer?.cancel();
+        autoDownTimer =
+            Timer.periodic(const Duration(milliseconds: 1000), (timer) {
+          moveBlockDown();
+        });
         break;
       default:
         return false;
@@ -248,6 +285,9 @@ class _TetrisGameViewState extends State<TetrisGameView> {
 
   @override
   void initState() {
+    autoDownTimer = Timer.periodic(const Duration(milliseconds: 1000), (timer) {
+      moveBlockDown();
+    });
     HardwareKeyboard.instance.addHandler(keyboardHandler);
     super.initState();
   }
@@ -287,7 +327,7 @@ class _TetrisGameViewState extends State<TetrisGameView> {
                                     width: 19,
                                     height: 19,
                                     color:
-                                        row == 0 ? Colors.white : Colors.blue,
+                                        row == 0 ? Colors.white : Colors.black,
                                     margin: const EdgeInsets.all(1),
                                   ),
                               ],
@@ -326,14 +366,14 @@ class _TetrisGameViewState extends State<TetrisGameView> {
                     ],
                   ),
                 ),
-                SizedBox(height: 20),
+                const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: () {
                     setState(() {
                       currentBlockY = 17;
                     });
                   },
-                  child: Text('Full Down'),
+                  child: const Text('Full Down'),
                 ),
                 ElevatedButton(
                   onPressed: () {
@@ -341,7 +381,7 @@ class _TetrisGameViewState extends State<TetrisGameView> {
                       moveBlockDown();
                     });
                   },
-                  child: Text('Move Down'),
+                  child: const Text('Move Down'),
                 ),
                 ElevatedButton(
                   onPressed: () {
@@ -349,7 +389,7 @@ class _TetrisGameViewState extends State<TetrisGameView> {
                       moveBlockLeft();
                     });
                   },
-                  child: Text('Move Left'),
+                  child: const Text('Move Left'),
                 ),
                 ElevatedButton(
                   onPressed: () {
@@ -357,7 +397,7 @@ class _TetrisGameViewState extends State<TetrisGameView> {
                       moveBlockRight();
                     });
                   },
-                  child: Text('Move Right'),
+                  child: const Text('Move Right'),
                 ),
                 ElevatedButton(
                   onPressed: () {
@@ -365,7 +405,7 @@ class _TetrisGameViewState extends State<TetrisGameView> {
                       reset();
                     });
                   },
-                  child: Text('Reset'),
+                  child: const Text('Reset'),
                 ),
                 ElevatedButton(
                   onPressed: () {
@@ -374,7 +414,7 @@ class _TetrisGameViewState extends State<TetrisGameView> {
                       // rotateLeft(blockShape);
                     });
                   },
-                  child: Text('rocate left'),
+                  child: const Text('rocate left'),
                 ),
                 ElevatedButton(
                   onPressed: () {
@@ -383,20 +423,21 @@ class _TetrisGameViewState extends State<TetrisGameView> {
                       // rotateRight(blockShape);
                     });
                   },
-                  child: Text('rocate right'),
+                  child: const Text('rocate right'),
                 ),
               ],
             ),
             Column(
               children: [
-                Text("Next"),
+                const Text("Next"),
                 SizedBox(
                   width: 80,
                   height: 80,
                   child: GridView.builder(
-                    physics: NeverScrollableScrollPhysics(),
+                    physics: const NeverScrollableScrollPhysics(),
                     itemCount: 16,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 4,
                     ),
                     itemBuilder: (BuildContext context, int index) {
@@ -406,11 +447,16 @@ class _TetrisGameViewState extends State<TetrisGameView> {
                         color: nextTetromino!.currentShape.shape[row][col] == 0
                             ? Colors.transparent
                             : nextTetromino!.type.color,
-                        margin: EdgeInsets.all(1),
+                        margin: const EdgeInsets.all(1),
                       );
                     },
                   ),
                 ),
+                const Text("W = ratate"),
+                const Text("A = move left"),
+                const Text("D = move right"),
+                const Text("S = move down"),
+                const Text("X = fall"),
               ],
             ),
           ],
